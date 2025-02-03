@@ -143,6 +143,13 @@ class Storage(AwsStorage, BaseStorage):
             file = await super(Storage, self).get(path)
         except BotoCoreError:
             return None
+        except ClientError as e:
+            # in case there is no key found we need to return None,
+            # so thumbor will try to cache the not existing image
+            if e.__class__.__name__ == 'NoSuchKey':
+                return None
+            else:
+                raise e
 
         async with file['Body'] as stream:
             return await stream.read()
@@ -161,4 +168,3 @@ class Storage(AwsStorage, BaseStorage):
         :param string path: Path to delete
         """
         return await self.storage.delete(self._normalize_path(path))
-
