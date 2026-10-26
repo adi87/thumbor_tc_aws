@@ -4,7 +4,9 @@
 # Use of this source code is governed by the MIT license that can be
 # found in the LICENSE file.
 
-import aiobotocore
+import asyncio
+
+from aiobotocore.session import get_session
 from botocore.client import Config
 from thumbor.utils import logger
 from thumbor.engines import BaseEngine
@@ -12,6 +14,7 @@ from thumbor.engines import BaseEngine
 
 class Bucket(object):
     _client = None
+    _client_lock = None
     _instances = {}
 
     @staticmethod
@@ -35,30 +38,45 @@ class Bucket(object):
         :return: The created bucket
         """
         self._bucket = bucket
+        self._region = region
+        self._endpoint = endpoint
 
-        config = None
+        self._config = None
         if max_retry is not None:
-            config = Config(
+            self._config = Config(
                 retries=dict(
                     max_attempts=max_retry
                 )
             )
 
+        if self._client_lock is None:
+            self._client_lock = asyncio.Lock()
+
+    async def _get_client(self):
+        """
+        Returns the S3 client, creating it on first use. aiobotocore clients are
+        async context managers; this one is entered once and kept open.
+        """
         if self._client is None:
-            self._client = aiobotocore.get_session().create_client(
-                's3',
-                region_name=region,
-                endpoint_url=endpoint,
-                config=config
-            )
+            async with self._client_lock:
+                if self._client is None:
+                    self._client = await get_session().create_client(
+                        's3',
+                        region_name=self._region,
+                        endpoint_url=self._endpoint,
+                        config=self._config
+                    ).__aenter__()
+
+        return self._client
 
     async def exists(self, path):
         """
         Checks if an object exists at a given path
         :param string path: Path or 'key' to retrieve AWS object
         """
+        client = await self._get_client()
         try:
-            await self._client.head_object(
+            await client.head_object(
                 Bucket=self._bucket,
                 Key=self._clean_key(path),
             )
@@ -71,8 +89,8 @@ class Bucket(object):
         Returns object at given path
         :param string path: Path or 'key' to retrieve AWS object
         """
-
-        return await self._client.get_object(
+        client = await self._get_client()
+        return await client.get_object(
             Bucket=self._bucket,
             Key=self._clean_key(path),
         )
@@ -84,8 +102,8 @@ class Bucket(object):
         :param string method: Method for requested URL
         :param int expiry: URL validity time
         """
-
-        url = await self._client.generate_presigned_url(
+        client = await self._get_client()
+        url = await client.generate_presigned_url(
             ClientMethod='get_object',
             Params={
                 'Bucket': self._bucket,
@@ -123,14 +141,16 @@ class Bucket(object):
         if metadata is not None:
             args['Metadata'] = metadata
 
-        return await self._client.put_object(**args)
+        client = await self._get_client()
+        return await client.put_object(**args)
 
     async def delete(self, path):
         """
         Deletes key at given path
         :param string path: Path or 'key' to delete
         """
-        return await self._client.delete_object(
+        client = await self._get_client()
+        return await client.delete_object(
             Bucket=self._bucket,
             Key=self._clean_key(path),
         )

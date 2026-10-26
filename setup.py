@@ -50,16 +50,18 @@ setup(
         "Topic :: Software Development :: Libraries :: Python Modules",
         "Topic :: Internet",
         "Programming Language :: Python :: 3",
-        "Programming Language :: Python :: 3.6",
-        "Programming Language :: Python :: 3.7",
-        "Programming Language :: Python :: 3.8",
+        "Programming Language :: Python :: 3.10",
+        "Programming Language :: Python :: 3.11",
+        "Programming Language :: Python :: 3.12",
+        "Programming Language :: Python :: 3.13",
+        "Programming Language :: Python :: 3.14",
     ],
     keywords='thumbor aws',
+    python_requires='>=3.10',
     install_requires=[
         'python-dateutil>=2.8',
         'thumbor>=7.0.0a2,<8',
-        'aiobotocore==0.12.0',
-        'boto3>=1.9,<1.13',
+        'aiobotocore>=3.9.2,<4',
     ],
     extras_require={
         'tests': [
